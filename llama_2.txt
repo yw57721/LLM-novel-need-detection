@@ -1,0 +1,357 @@
+Meta prompts source：Learning from Contrastive Prompts (LCP) Automated Optimization and Adaption
+model = "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo"
+Llama-3.1 maximum context length is 131072(128K) tokens. Request 31072(28K) tokens in the messages, 100K in the completion
+max_tokens=100K, top_p=0.95, repetition_penalty=1(no penalty), model_seed=42
+
+df = pd.read_excel('novel_generate_v3.xlsx')
+df = df[:1000].random
+columns = [label, novel_reason, review], only novel reviews have novel_reason, empty otherwise
+train : val : test = 400:200:400
+
+1. Randomly select 5/10/20/38 training data (random_seed=11/22/44) (76 data resulted in model server overload)
+2. Generate reasons for each train data, temperature=0/.25/.5/.75/1
+  system = 'You are a helpful customer review expert'
+  prompt = 
+    "Given customer review: {review} And its expected output, 0 for review with common needs and 1 for review with novel needs: {label}, because the laptop has {novel_reason} Explain the reasons why the input corresponds to the given expected output one by one. The reasons should be placed within tags <reason> and </reason>."
+3. Summarize the reasons above, temperature=0/.25/.5/.75/1
+  system = 'You are a helpful customer review expert'
+  prompt = 
+    "{reasons} Given input and expected output pairs, along with the reason for generated outputs, provide a summarized common reason applicable to all cases within tags <summary> and </summary>. The summary should explain the underlying principles, logic or methodology governing the relationship between the inputs and corresponding outputs. Avoid mentioning any specific details, numbers, or entities from the individual examples, and aim for a generalized explanation."
+4. Generate prediction labels for each test data, model temperature same as step 3
+  system = 
+    "You are a highly advanced Natural Language Processing (NLP) model, specifically designed to analyze and classify customer reviews based on their needs. Your primary function is to determine whether a review expresses common or novel needs, and return a corresponding output of 0 or 1. With your sophisticated language understanding capabilities, you can accurately identify the nuances of customer feedback, recognizing patterns and sentiment that may not be immediately apparent. Your training data consists of a vast array of customer reviews, allowing you to develop a deep understanding of the language and terminology used to express various needs. When a customer review is inputted, you quickly process the text, analyzing the language, tone, and context to determine the type of need being expressed. 
+    Your advanced algorithms and machine learning models enable you to distinguish between common needs and novel needs. 
+    {reasons_summary}
+    With your high degree of accuracy, you can confidently return an output of 0 for reviews with common needs or an output of 1 for reviews with novel needs, nothing else. Your capabilities make you an invaluable asset in understanding customer needs, enabling businesses to tailor their products and services to meet the evolving demands of their customers."
+  prompt = test data one by one
+5. Store the prediction labels and generate confusion matrix. Best hyperparameters is temperature=0.75/0.75
+
+For 0/5/10-shot baselines, direct to step 4, temperature=0.75
+  system = 
+    "{training customer reviews & corresponding labels} Return an output of 0 for reviews with common needs or an output of 1 for reviews with novel needs, nothing else"
+  prompt = test data one by one
+
+========================================================================================
+Baselines, tem=0.75
+0-shot        precision    recall  f1-score   support
+      Common     0.9501    0.9257    0.9378       350
+      Unique     0.5593    0.6600    0.6055        50
+    accuracy                         0.8925       400
+   macro avg     0.7547    0.7929    0.7716       400
+weighted avg     0.9013    0.8925    0.8962       400
+[[324  26]
+ [ 17  33]]
+5-shot        precision    recall  f1-score   support
+      Common     0.9969    0.9200    0.9569       350
+      Unique     0.6364    0.9800    0.7717        50
+    accuracy                         0.9275       400
+   macro avg     0.8166    0.9500    0.8643       400
+weighted avg     0.9518    0.9275    0.9338       400
+[[322  28]
+ [  1  49]]
+10-shot       precision    recall  f1-score   support
+      Common     0.9968    0.9029    0.9475       350
+      Unique     0.5904    0.9800    0.7368        50
+    accuracy                         0.9125       400
+   macro avg     0.7936    0.9414    0.8422       400
+weighted avg     0.9460    0.9125    0.9212       400
+[[316  34]
+ [  1  49]]
+
+========================================================================================
+tem=0.75/0.75, train on 0/5/10/20 customer reviews, random_seed=11/22/44
+train on 0    precision    recall  f1-score   support
+      Common     0.9682    0.7829    0.8657       350
+      Unique     0.3504    0.8200    0.4910        50
+    accuracy                         0.7875       400
+   macro avg     0.6593    0.8014    0.6784       400
+weighted avg     0.8910    0.7875    0.8189       400
+[[274  76]
+ [  9  41]]
+5, seed=11    precision    recall  f1-score   support
+      Common     0.9771    0.9771    0.9771       350
+      Unique     0.8400    0.8400    0.8400        50
+    accuracy                         0.9600       400
+   macro avg     0.9086    0.9086    0.9086       400
+weighted avg     0.9600    0.9600    0.9600       400
+[[342   8]
+ [  8  42]]
+5, seed=22    precision    recall  f1-score   support
+      Common     0.9646    0.9343    0.9492       350
+      Unique     0.6230    0.7600    0.6847        50
+    accuracy                         0.9125       400
+   macro avg     0.7938    0.8471    0.8169       400
+weighted avg     0.9219    0.9125    0.9161       400
+[[327  23]
+ [ 12  38]]
+5, seed=44    precision    recall  f1-score   support
+      Common     0.9659    0.9714    0.9687       350
+      Unique     0.7917    0.7600    0.7755        50
+    accuracy                         0.9450       400
+   macro avg     0.8788    0.8657    0.8721       400
+weighted avg     0.9441    0.9450    0.9445       400
+[[340  10]
+ [ 12  38]]
+10, seed=11   precision    recall  f1-score   support
+      Common     0.9911    0.9571    0.9738       350
+      Unique     0.7581    0.9400    0.8393        50
+    accuracy                         0.9550       400
+   macro avg     0.8746    0.9486    0.9066       400
+weighted avg     0.9620    0.9550    0.9570       400
+[[335  15]
+ [  3  47]]
+10, seed=22   precision    recall  f1-score   support
+      Common     0.9856    0.9800    0.9828       350
+      Unique     0.8654    0.9000    0.8824        50
+    accuracy                         0.9700       400
+   macro avg     0.9255    0.9400    0.9326       400
+weighted avg     0.9706    0.9700    0.9703       400
+[[343   7]
+ [  5  45]]
+10, seed=44   precision    recall  f1-score   support
+      Common     0.9773    0.9829    0.9801       350
+      Unique     0.8750    0.8400    0.8571        50
+    accuracy                         0.9650       400
+   macro avg     0.9261    0.9114    0.9186       400
+weighted avg     0.9645    0.9650    0.9647       400
+[[344   6]
+ [  8  42]]
+20, seed=11   precision    recall  f1-score   support
+      Common     0.9795    0.9543    0.9667       350
+      Unique     0.7288    0.8600    0.7890        50
+    accuracy                         0.9425       400
+   macro avg     0.8541    0.9071    0.8779       400
+weighted avg     0.9481    0.9425    0.9445       400
+[[334  16]
+ [  7  43]]
+20, seed=22   precision    recall  f1-score   support
+      Common     0.9885    0.9800    0.9842       350
+      Unique     0.8679    0.9200    0.8932        50
+    accuracy                         0.9725       400
+   macro avg     0.9282    0.9500    0.9387       400
+weighted avg     0.9734    0.9725    0.9728       400
+[[343   7]
+ [  4  46]]
+20, seed=44   precision    recall  f1-score   support
+      Common     0.9912    0.9686    0.9798       350
+      Unique     0.8103    0.9400    0.8704        50
+    accuracy                         0.9650       400
+   macro avg     0.9008    0.9543    0.9251       400
+weighted avg     0.9686    0.9650    0.9661       400
+[[339  11]
+ [  3  47]]
+
+========================================================================================
+train on 38 customer review, random_seed=11, model_seed=42, consistent temperature=0/.25/.5/.75/1
+tem=1/1       precision    recall  f1-score   support
+      Common     0.9824    0.9571    0.9696       350
+      Unique     0.7458    0.8800    0.8073        50
+    accuracy                         0.9475       400
+   macro avg     0.8641    0.9186    0.8885       400
+weighted avg     0.9528    0.9475    0.9493       400
+[[335  15]
+ [  6  44]]
+tem=.75/.75   precision    recall  f1-score   support    SOTA
+      Common     0.9858    0.9886    0.9872       350
+      Unique     0.9184    0.9000    0.9091        50
+    accuracy                         0.9775       400
+   macro avg     0.9521    0.9443    0.9481       400
+weighted avg     0.9773    0.9775    0.9774       400
+[[346   4]
+ [  5  45]]
+tem=.5/.5     precision    recall  f1-score   support
+      Common     0.9773    0.9857    0.9815       350
+      Unique     0.8936    0.8400    0.8660        50
+    accuracy                         0.9675       400
+   macro avg     0.9355    0.9129    0.9237       400
+weighted avg     0.9669    0.9675    0.9671       400
+[[345   5]
+ [  8  42]]
+tem=.25/.25   precision    recall  f1-score   support
+      Common     0.9801    0.9857    0.9829       350
+      Unique     0.8958    0.8600    0.8776        50
+    accuracy                         0.9700       400
+   macro avg     0.9380    0.9229    0.9302       400
+weighted avg     0.9696    0.9700    0.9697       400
+[[345   5]
+ [  7  43]]
+tem=0/0       precision    recall  f1-score   support
+      Common     0.9746    0.9857    0.9801       350
+      Unique     0.8913    0.8200    0.8542        50
+    accuracy                         0.9650       400
+   macro avg     0.9329    0.9029    0.9171       400
+weighted avg     0.9642    0.9650    0.9644       400
+[[345   5]
+ [  9  41]]
+
+5 models for 5 temperatures, classified as 1 if more than 0 models vote as 1
+5>0=1         precision    recall  f1-score   support
+      Common     0.9911    0.9543    0.9723       350
+      Unique     0.7460    0.9400    0.8319        50
+    accuracy                         0.9525       400
+   macro avg     0.8686    0.9471    0.9021       400
+weighted avg     0.9605    0.9525    0.9548       400
+[[334  16]
+ [  3  47]]
+classified as 1 if more than 1 models vote as 1
+5>1=1         precision    recall  f1-score   support    SOTA
+      Common     0.9885    0.9800    0.9842       350
+      Unique     0.8679    0.9200    0.8932        50
+    accuracy                         0.9725       400
+   macro avg     0.9282    0.9500    0.9387       400
+weighted avg     0.9734    0.9725    0.9728       400
+[[343   7]
+ [  4  46]]
+5>2=1         precision    recall  f1-score   support
+      Common     0.9774    0.9886    0.9830       350
+      Unique     0.9130    0.8400    0.8750        50
+    accuracy                         0.9700       400
+   macro avg     0.9452    0.9143    0.9290       400
+weighted avg     0.9694    0.9700    0.9695       400
+[[346   4]
+ [  8  42]]
+5>3=1         precision    recall  f1-score   support
+      Common     0.9746    0.9886    0.9816       350
+      Unique     0.9111    0.8200    0.8632        50
+    accuracy                         0.9675       400
+   macro avg     0.9429    0.9043    0.9224       400
+weighted avg     0.9667    0.9675    0.9668       400
+[[346   4]
+ [  9  41]]
+5>4=1         precision    recall  f1-score   support
+      Common     0.9693    0.9914    0.9802       350
+      Unique     0.9286    0.7800    0.8478        50
+    accuracy                         0.9650       400
+   macro avg     0.9489    0.8857    0.9140       400
+weighted avg     0.9642    0.9650    0.9637       400
+[[347   3]
+ [ 11  39]]
+
+长短文本分类，tem=.75/.75 SOTA
+1~19 words    precision    recall  f1-score   support
+      Common     1.0000    1.0000    1.0000       133
+      Unique     1.0000    1.0000    1.0000         3
+    accuracy                         1.0000       136
+   macro avg     1.0000    1.0000    1.0000       136
+weighted avg     1.0000    1.0000    1.0000       136
+[[133   0]
+ [  0   3]]
+20~52         precision    recall  f1-score   support
+      Common     0.9720    0.9811    0.9765       106
+      Unique     0.9167    0.8800    0.8980        25
+    accuracy                         0.9618       131
+   macro avg     0.9443    0.9306    0.9372       131
+weighted avg     0.9614    0.9618    0.9615       131
+[[104   2]
+ [  3  22]]
+53~748        precision    recall  f1-score   support
+      Common     0.9820    0.9820    0.9820       111
+      Unique     0.9091    0.9091    0.9091        22
+    accuracy                         0.9699       133
+   macro avg     0.9455    0.9455    0.9455       133
+weighted avg     0.9699    0.9699    0.9699       133
+[[109   2]
+ [  2  20]]
+
+========================================================================================
+train on 38 customer reviews, random_seed=11, model_seed=42, temperature=0/.25/.5/.75/1
+tem=.75/0     precision    recall  f1-score   support
+      Common     0.9801    0.9857    0.9829       350
+      Unique     0.8958    0.8600    0.8776        50
+    accuracy                         0.9700       400
+   macro avg     0.9380    0.9229    0.9302       400
+weighted avg     0.9696    0.9700    0.9697       400
+[[345   5]
+ [  7  43]]
+tem=.75/.25   precision    recall  f1-score   support
+      Common     0.9801    0.9829    0.9815       350
+      Unique     0.8776    0.8600    0.8687        50
+    accuracy                         0.9675       400
+   macro avg     0.9288    0.9214    0.9251       400
+weighted avg     0.9672    0.9675    0.9674       400
+[[344   6]
+ [  7  43]]
+tem=.75/.5    precision    recall  f1-score   support
+      Common     0.9800    0.9800    0.9800       350
+      Unique     0.8600    0.8600    0.8600        50
+    accuracy                         0.9650       400
+   macro avg     0.9200    0.9200    0.9200       400
+weighted avg     0.9650    0.9650    0.9650       400
+[[343   7]
+ [  7  43]]
+tem=.75/1     precision    recall  f1-score   support
+      Common     0.9883    0.9686    0.9784       350
+      Unique     0.8070    0.9200    0.8598        50
+    accuracy                         0.9625       400
+   macro avg     0.8977    0.9443    0.9191       400
+weighted avg     0.9657    0.9625    0.9635       400
+[[339  11]
+ [  4  46]]
+tem=0/.75     precision    recall  f1-score   support
+      Common     0.9913    0.9714    0.9812       350
+      Unique     0.8246    0.9400    0.8785        50
+    accuracy                         0.9675       400
+   macro avg     0.9079    0.9557    0.9299       400
+weighted avg     0.9704    0.9675    0.9684       400
+[[340  10]
+ [  3  47]]
+tem=.25/.75   precision    recall  f1-score   support
+      Common     0.9854    0.9657    0.9755       350
+      Unique     0.7895    0.9000    0.8411        50
+    accuracy                         0.9575       400
+   macro avg     0.8874    0.9329    0.9083       400
+weighted avg     0.9609    0.9575    0.9587       400
+[[338  12]
+ [  5  45]]
+tem=.5/.75    precision    recall  f1-score   support
+      Common     0.9856    0.9771    0.9813       350
+      Unique     0.8491    0.9000    0.8738        50
+    accuracy                         0.9675       400
+   macro avg     0.9173    0.9386    0.9276       400
+weighted avg     0.9685    0.9675    0.9679       400
+[[342   8]
+ [  5  45]]
+tem=1/.75     precision    recall  f1-score   support
+      Common     0.9855    0.9743    0.9799       350
+      Unique     0.8333    0.9000    0.8654        50
+    accuracy                         0.9650       400
+   macro avg     0.9094    0.9371    0.9226       400
+weighted avg     0.9665    0.9650    0.9656       400
+[[341   9]
+ [  5  45]]
+
+========================================================================================
+Add 38 Customer reviews & Expected outputs & Reasons (without summary) into system
+validation set precision    recall  f1-score   support
+      Common     0.9100    1.0000    0.9529       182
+      Unique     0.0000    0.0000    0.0000        18
+    accuracy                         0.9100       200
+   macro avg     0.4550    0.5000    0.4764       200
+weighted avg     0.8281    0.9100    0.8671       200
+[[182   0]
+ [ 18   0]]
+
+========================================================================================
+Add 38 Customer reviews & Expected outputs & Reasons (with summary) into system
+common needs also have reasons generated by LLM
+validation set precision    recall  f1-score   support
+      Common     0.9760    0.8956    0.9341       182
+      Unique     0.4242    0.7778    0.5490        18
+    accuracy                         0.8850       200
+   macro avg     0.7001    0.8367    0.7416       200
+weighted avg     0.9264    0.8850    0.8994       200
+[[163  19]
+ [  4  14]]
+test set      precision    recall  f1-score   support
+      Common     0.9876    0.9114    0.9480       350
+      Unique     0.5974    0.9200    0.7244        50
+    accuracy                         0.9125       400
+   macro avg     0.7925    0.9157    0.8362       400
+weighted avg     0.9388    0.9125    0.9200       400
+[[319  31]
+ [  4  46]]
+
+
+
+
+
